@@ -159,10 +159,14 @@ class CachedDatagrid extends SimbioTable {
         // real query
         $_start = function_exists('microtime')?microtime(true):time();
 
-        $cache_key_name = $this->table_name . '_page_' . $this->current_page;
+        $node = 'master';
+        if ( isset($_SESSION['node']) && !empty($_SESSION['node']) ) {
+            $node = strtolower( str_ireplace(array(' ', ':', '=', '-', '\'', '"', '+', '(', ')'), '', $_SESSION['node']) ); 
+        }
+        $cache_key_name = $node . '_' . $this->table_name . '_page_' . $this->current_page;
         if (isset($_GET['keywords']) AND $_GET['keywords']) {
             $keywords = strtolower(str_ireplace(array(' ', ':', '=', '-', '\'', '"', '+', '(', ')'), '', $_GET['keywords']));
-            $cache_key_name = $this->table_name . '_' . $keywords . '_page_' . $this->current_page;
+            $cache_key_name .= '_' . $keywords;
         }
 
         if (!$this->redis || !$this->redis->get($cache_key_name)) {
@@ -201,13 +205,13 @@ class CachedDatagrid extends SimbioTable {
 
             // cache result
             $this->redis->set($cache_key_name, json_encode($this->grid_result_rows));
-            $this->redis->set($this->table_name . '_num_rows', $this->num_rows);
-            $this->redis->set($this->table_name . '_field_info', json_encode($this->field_info));
+            $this->redis->set($node . '_' . $this->table_name . '_num_rows', $this->num_rows);
+            $this->redis->set($node . '_' . $this->table_name . '_field_info', json_encode($this->field_info));
             
             // set cache lifetime (in seconds)
             $this->redis->expire($cache_key_name, $this->redis_cache_lifetime);
-            $this->redis->expire($this->table_name . '_num_rows', $this->redis_cache_lifetime);
-            $this->redis->expire($this->table_name . '_field_info', $this->redis_cache_lifetime);
+            $this->redis->expire($node . '_' . $this->table_name . '_num_rows', $this->redis_cache_lifetime);
+            $this->redis->expire($node . '_' . $this->table_name . '_field_info', $this->redis_cache_lifetime);
 
             // free resultset memory
             $this->grid_real_q->free_result();
@@ -215,8 +219,8 @@ class CachedDatagrid extends SimbioTable {
             debug('Using cache key:' . $cache_key_name);
             // get cached data
             $this->grid_result_rows = json_decode($this->redis->get($cache_key_name), true);
-            $this->num_rows = $this->redis->get($this->table_name . '_num_rows');
-            $this->field_info = json_decode($this->redis->get($this->table_name . '_field_info'), false);
+            $this->num_rows = $this->redis->get($node . '_' . $this->table_name . '_num_rows');
+            $this->field_info = json_decode($this->redis->get($node . '_' . $this->table_name . '_field_info'), false);
             $_end = function_exists('microtime')?microtime(true):time();
         }
 
