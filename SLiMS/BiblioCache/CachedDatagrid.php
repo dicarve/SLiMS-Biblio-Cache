@@ -211,7 +211,7 @@ class CachedDatagrid extends SimbioTable {
 
             // free resultset memory
             $this->grid_real_q->free_result();
-        } else if ($this->redis && $this->redis->get($this->table_name)) {
+        } else if ($this->redis && $this->redis->get($cache_key_name)) {
             debug('Using cache key:' . $cache_key_name);
             // get cached data
             $this->grid_result_rows = json_decode($this->redis->get($cache_key_name), true);
