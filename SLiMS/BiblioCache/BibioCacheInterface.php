@@ -1,87 +1,120 @@
 <?php
 /**
- * Class Name: Cache biblio data into Redis server
- * Description: This class handle biblio data caching mechanism into using Redis server.
+ * Class Name: Abstract class for cache implementation
+ * Description: This abstract class provides template for cache mechanism.
  * Version: 0.0.1
  * Author: Ari Nugraha
  * Author URI: https://github.com/dicarve
  */
 namespace SLiMS\BiblioCache;
 
-class CacheRedis {
-    protected $redis = null;
-    protected $redis_host = '127.0.0.1';
-    protected $redis_port = 6379;
-    protected $redis_auth = null;
-    protected $redis_cache_lifetime = 60;
+abstract class BibioCacheInterface {
+    protected $cache_server = null;
+    protected $cache_host = '127.0.0.1';
+    protected $cache_port = 6379;
+    protected $cache_auth = null;
+    protected $cache_lifetime = 60;
+    protected $cache_options = array();
     protected $db = null;
 
+    /**
+     * 
+     * Set database connection object to the origin database server.
+     * @param object $db : the database connection object such as PDO.
+     * @return : void
+     * 
+     */
     public function setDBConn($db) {
         $this->db = $db;
     }
 
-    public function setCache($key_name, $key_value, $lifetime = 60) {
-        $this->redis->set($key_name, $key_value);
-        $this->redis->expire($key_name, $lifetime);
-    }
+    /**
+     * 
+     * Connect to the cache server. This method should set the cache_server property
+     * @param string $host  : the cache server address.
+     * @param integer $port : the port number of host.
+     * @param string $auth  : the authentication key/password for connection.
+     * @param array $options: the options to the server connection.
+     * @return void 
+     * 
+     */
+    abstract public function connectServer($host = '127.0.0.1', $port = 9999, $auth = '', $options = array());
 
+    /**
+     * 
+     * Set cache.
+     * @param string $key_name  : the key name to hold the cache value.
+     * @param mixed $value      : the value to store. We recommend to serialize the value into JSON string.
+     * @param integer $lifetime : the lifetime of cache, in seconds.
+     * @return void
+     * 
+     */
+    abstract public function setCache($key_name, $value, $lifetime = 60);
+
+    /**
+     * 
+     * Get cache based on the key name.
+     * @param string $key_name : the key name to hold the cache value.
+     * @return array
+     * 
+     */
+    abstract public function getCache($key_name);
+
+    /**
+     * 
+     * Delete cache based on the key name.
+     * @param string $key_name : the key name to delete.
+     * @return void
+     * 
+     */
+    abstract public function removeCache($key_name);
+
+    /**
+     * 
+     * Purge all caches registered.
+     * @return void
+     * 
+     */
+    abstract public function purgeCaches();
+
+    /**
+     * 
+     * Set cache for a single biblio data.
+     * @param integer $biblio_id        : the database ID of biblio data.
+     * @param array $biblio_data_array  : the array of biblio data to cache.
+     * @param integer $lifetime         : the lifetime of cache, in seconds.
+     * @return void
+     * 
+     */
     public function cacheBiblioDetail($biblio_id, $biblio_data_array, $lifetime = 60) {
         $this->setCache( 'biblio_detail_'.$biblio_id, json_encode($biblio_data_array), $lifetime );
     }
 
-    public function connectRedis() {
-        global $sysconf;
-
-        if (isset($sysconf['redis_host']) && !empty($sysconf['redis_host'])) {
-            $this->redis_host = $sysconf['redis_host'];
-        } else if (defined('REDIS_HOST')) {
-            $this->redis_host = REDIS_HOST;
-        }
-
-        if (isset($sysconf['redis_port']) && !empty($sysconf['redis_port'])) {
-            $this->redis_port = $sysconf['redis_port'];
-        } else if (defined('REDIS_PORT')) {
-            $this->redis_port = REDIS_PORT;
-        }
-
-        if (isset($sysconf['redis_cache_lifetime']) && !empty($sysconf['redis_cache_lifetime'])) {
-            $this->redis_cache_lifetime = $sysconf['redis_cache_lifetime'];
-        } else if (defined('REDIS_CACHE_LIFETIME')) {
-            $this->redis_cache_lifetime = REDIS_CACHE_LIFETIME;
-        }
-
-        if (class_exists("\Redis")) {
-            // connect to Redis
-            $this->redis = new \Redis();
-
-            try {
-                $this->redis->connect($this->redis_host, $this->redis_port);
-                // authentication
-                if (isset($sysconf['redis_auth']) && !empty($sysconf['redis_auth'])) {
-                    $this->redis_auth = $sysconf['redis_auth'];
-                } else if (defined('REDIS_AUTH')) {
-                    $this->redis_auth = REDIS_AUTH;
-                }
-                if ($this->redis_auth) {
-                    $this->redis->auth($this->redis_auth);
-                }
-            } catch (Exception $error) {
-                debug($error->getMessage());
-                return false;
-            }
-        }
+    /**
+     * 
+     * Get cache data for a single biblio data.
+     * @param integer $biblio_id        : the database ID of biblio data.
+     * @return array/object
+     * 
+     */
+    public function getBiblioDetailCache($biblio_id) {
+        return $this->getCache( 'biblio_detail_'.$biblio_id );
     }
 
+    /**
+     * 
+     * This method overrides the simbio_datagrid implementation so it can store and output the data from the cache as well.
+     * @return void 
+     * 
+     */
     public function reCreateDatagrid() {
         global $datagrid, $dbs, $sysconf, $can_read, $can_write, $biblio_result_num;
-        // echo 'Cache Plugin Active';
-        // exit();
 
-        $this->connectRedis();
-        if ($this->redis) {
-            $datagrid = new CachedDatagrid();
-            $datagrid->setRedis($this->redis);
-            $datagrid->setRedisCacheLifetime($this->redis_cache_lifetime);
+        $this->connectServer();
+        if ($this->cache_server) {
+            $datagrid = new \SLiMS\BiblioCache\CachedDatagrid();
+            $datagrid->setCacheServer($this);
+            $datagrid->setCacheLifetime($this->cache_lifetime);
             
             // index choice
             if ($sysconf['index']['type'] != 'default') {
