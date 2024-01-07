@@ -1,2 +1,2 @@
-# SLiMS-Biblio-Cache-Redis
-SLiMS 9 plugin to cache biblio data into Redis server
+# SLiMS Biblio Cache
+SLiMS 9 plugin to cache biblio data for faster access
